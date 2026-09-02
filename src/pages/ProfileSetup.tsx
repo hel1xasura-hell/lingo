@@ -6,8 +6,14 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
-import { COUNTRIES, EXPLANATION_LANGUAGES, ENGLISH_LEVELS } from "@/data/mockData";
+import {
+  COUNTRIES,
+  EXPLANATION_LANGUAGES,
+  ENGLISH_LEVELS,
+} from "@/data/mockData";
 import type { ProfileSetupFormValues } from "@/types";
+import { getCurrentUser } from "@/lib/auth";
+import { createProfile } from "@/lib/profile";
 
 const initialValues: ProfileSetupFormValues = {
   username: "",
@@ -19,46 +25,98 @@ const initialValues: ProfileSetupFormValues = {
 
 export function ProfileSetup() {
   const navigate = useNavigate();
-  const [values, setValues] = useState<ProfileSetupFormValues>(initialValues);
+  const [values, setValues] =
+    useState<ProfileSetupFormValues>(initialValues);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function update<K extends keyof ProfileSetupFormValues>(key: K, value: ProfileSetupFormValues[K]) {
+  function update<K extends keyof ProfileSetupFormValues>(
+    key: K,
+    value: ProfileSetupFormValues[K],
+  ) {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
     if (!values.username.trim()) {
       setError("Please enter a username so we know what to call you.");
       return;
     }
+
     setError(null);
-    // Milestone 2: persist this to the user's Supabase profile row.
-    navigate("/dashboard");
+    setIsSubmitting(true);
+
+    try {
+      const user = await getCurrentUser();
+
+      if (!user) {
+        setError("Your session has expired. Please log in again.");
+        return;
+      }
+
+      await createProfile({
+        id: user.id,
+        username: values.username.trim(),
+        country: values.country,
+        explanation_language: values.explanationLanguage,
+        english_level: values.englishLevel,
+        target_level: values.targetLevel,
+      });
+
+      navigate("/dashboard");
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Unable to save your profile.";
+
+      setError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
     <AuthLayout>
       <Card className="animate-fade-slide-up">
         <div className="flex items-center justify-between">
-          <h1 className="font-display text-2xl font-semibold">Set up your profile</h1>
-          <span className="text-xs font-medium text-plum-400">Step 1 of 1</span>
+          <h1 className="font-display text-2xl font-semibold">
+            Set up your profile
+          </h1>
+
+          <span className="text-xs font-medium text-plum-400">
+            Step 1 of 1
+          </span>
         </div>
+
         <p className="mt-1 text-sm text-plum-400">
           A few details to personalize your learning experience.
         </p>
 
-        <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
+        <form
+          className="mt-6 flex flex-col gap-4"
+          onSubmit={handleSubmit}
+          noValidate
+        >
           <Input
             label="Username"
             value={values.username}
-            onChange={(event) => update("username", event.target.value)}
+            onChange={(event) =>
+              update("username", event.target.value)
+            }
           />
 
           <Select
             label="Country"
             value={values.country}
-            onChange={(event) => update("country", event.target.value as ProfileSetupFormValues["country"])}
+            onChange={(event) =>
+              update(
+                "country",
+                event.target.value as ProfileSetupFormValues["country"],
+              )
+            }
           >
             {COUNTRIES.map((country) => (
               <option key={country.code} value={country.code}>
@@ -71,7 +129,11 @@ export function ProfileSetup() {
             label="What language would you like to use for explanations?"
             value={values.explanationLanguage}
             onChange={(event) =>
-              update("explanationLanguage", event.target.value as ProfileSetupFormValues["explanationLanguage"])
+              update(
+                "explanationLanguage",
+                event.target
+                  .value as ProfileSetupFormValues["explanationLanguage"],
+              )
             }
           >
             {EXPLANATION_LANGUAGES.map((lang) => (
@@ -85,7 +147,13 @@ export function ProfileSetup() {
             <Select
               label="English level"
               value={values.englishLevel}
-              onChange={(event) => update("englishLevel", event.target.value as ProfileSetupFormValues["englishLevel"])}
+              onChange={(event) =>
+                update(
+                  "englishLevel",
+                  event.target
+                    .value as ProfileSetupFormValues["englishLevel"],
+                )
+              }
             >
               {ENGLISH_LEVELS.map((level) => (
                 <option key={level} value={level}>
@@ -97,7 +165,13 @@ export function ProfileSetup() {
             <Select
               label="Target level"
               value={values.targetLevel}
-              onChange={(event) => update("targetLevel", event.target.value as ProfileSetupFormValues["targetLevel"])}
+              onChange={(event) =>
+                update(
+                  "targetLevel",
+                  event.target
+                    .value as ProfileSetupFormValues["targetLevel"],
+                )
+              }
             >
               {ENGLISH_LEVELS.map((level) => (
                 <option key={level} value={level}>
@@ -108,16 +182,24 @@ export function ProfileSetup() {
           </div>
 
           {error && (
-            <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">
+            <p
+              role="alert"
+              className="text-sm text-rose-600 dark:text-rose-300"
+            >
               {error}
             </p>
           )}
 
-          <Button type="submit" size="lg" className="mt-2 w-full">
-            Go to dashboard
+          <Button
+            type="submit"
+            size="lg"
+            className="mt-2 w-full"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? "Saving..." : "Go to dashboard"}
           </Button>
         </form>
       </Card>
     </AuthLayout>
   );
-}
+  }
