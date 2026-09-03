@@ -1,5 +1,17 @@
 import { supabase } from "./supabase";
 
+function throwSupabaseError(error: unknown, fallback: string): never {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error
+  ) {
+    throw new Error(String(error.message));
+  }
+
+  throw new Error(fallback);
+}
+
 export async function getProfile(userId: string) {
   const { data, error } = await supabase
     .from("profiles")
@@ -8,7 +20,7 @@ export async function getProfile(userId: string) {
     .single();
 
   if (error) {
-    throw error;
+    throwSupabaseError(error, "Unable to load your profile.");
   }
 
   return data;
@@ -29,7 +41,7 @@ export async function createProfile(profile: {
     .single();
 
   if (error) {
-    throw error;
+    throwSupabaseError(error, "Unable to save your profile.");
   }
 
   return data;
@@ -43,7 +55,7 @@ export async function updateProfile(
     explanation_language?: string;
     english_level?: string;
     target_level?: string;
-  }
+  },
 ) {
   const { data, error } = await supabase
     .from("profiles")
@@ -53,7 +65,7 @@ export async function updateProfile(
     .single();
 
   if (error) {
-    throw error;
+    throwSupabaseError(error, "Unable to update your profile.");
   }
 
   return data;
