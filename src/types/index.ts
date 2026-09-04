@@ -83,6 +83,7 @@ export interface RegisterFormValues {
 }
 
 export interface ProfileSetupFormValues {
+  name: string;
   username: string;
   country: CountryCode;
   explanationLanguage: ExplanationLanguage;
