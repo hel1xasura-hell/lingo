@@ -26,30 +26,10 @@ export async function getProfile(userId: string) {
   return data;
 }
 
-export async function createProfile(profile: {
-  id: string;
-  username: string;
-  country: string;
-  explanation_language: string;
-  english_level: string;
-  target_level: string;
-}) {
-  const { data, error } = await supabase
-    .from("profiles")
-    .upsert(profile, { onConflict: "id" })
-    .select()
-    .single();
-
-  if (error) {
-    throwSupabaseError(error, "Unable to save your profile.");
-  }
-
-  return data;
-}
-
 export async function updateProfile(
   userId: string,
   updates: {
+    name?: string;
     username?: string;
     country?: string;
     explanation_language?: string;
