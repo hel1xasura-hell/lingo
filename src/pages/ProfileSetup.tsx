@@ -13,7 +13,7 @@ import {
 } from "@/data/mockData";
 import type { ProfileSetupFormValues } from "@/types";
 import { getCurrentUser } from "@/lib/auth";
-import { createProfile } from "@/lib/profile";
+import { updateProfile } from "@/lib/profile";
 
 const initialValues: ProfileSetupFormValues = {
   username: "",
@@ -56,8 +56,7 @@ export function ProfileSetup() {
         return;
       }
 
-      await createProfile({
-        id: user.id,
+      await updateProfile(user.id, {
         username: values.username.trim(),
         country: values.country,
         explanation_language: values.explanationLanguage,
@@ -202,4 +201,4 @@ export function ProfileSetup() {
       </Card>
     </AuthLayout>
   );
-  }
+}
