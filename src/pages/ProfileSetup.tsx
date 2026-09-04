@@ -16,6 +16,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { updateProfile } from "@/lib/profile";
 
 const initialValues: ProfileSetupFormValues = {
+  name: "",
   username: "",
   country: "IN",
   explanationLanguage: "hi",
@@ -40,8 +41,13 @@ export function ProfileSetup() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (!values.name.trim()) {
+      setError("Please enter your name.");
+      return;
+    }
+
     if (!values.username.trim()) {
-      setError("Please enter a username so we know what to call you.");
+      setError("Please choose a username.");
       return;
     }
 
@@ -57,6 +63,7 @@ export function ProfileSetup() {
       }
 
       await updateProfile(user.id, {
+        name: values.name.trim(),
         username: values.username.trim(),
         country: values.country,
         explanation_language: values.explanationLanguage,
@@ -100,12 +107,26 @@ export function ProfileSetup() {
           noValidate
         >
           <Input
+            label="Name"
+            placeholder="Your name"
+            value={values.name}
+            onChange={(event) =>
+              update("name", event.target.value)
+            }
+          />
+
+          <Input
             label="Username"
+            placeholder="Choose a username"
             value={values.username}
             onChange={(event) =>
               update("username", event.target.value)
             }
           />
+
+          <p className="-mt-2 text-xs text-plum-400">
+            Your username will be used by friends to find you.
+          </p>
 
           <Select
             label="Country"
