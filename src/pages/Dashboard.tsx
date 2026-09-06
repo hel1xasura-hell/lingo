@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { BookOpen, Star, PenSquare, Target } from "lucide-react";
 import { getGreeting } from "@/lib/utils";
 import {
-  mockDailyGoal,
   mockContinueLearning,
   mockDailyWord,
   mockPartners,
@@ -15,23 +14,24 @@ import { ContinueLearningCard } from "@/components/dashboard/ContinueLearningCar
 import { VocabularyCard } from "@/components/dashboard/VocabularyCard";
 import { CoupleProgressCard } from "@/components/dashboard/CoupleProgressCard";
 import { getCurrentUser } from "@/lib/auth";
+import { getProgress } from "@/lib/progress";
 import { getProfile } from "@/lib/profile";
+import type { LocalProgress } from "@/lib/storage/progressStore";
 
 interface DashboardProfile {
   username: string;
   english_level: string;
-  xp: number;
-  streak: number;
 }
 
 export function Dashboard() {
   const greeting = getGreeting();
 
   const [profile, setProfile] = useState<DashboardProfile | null>(null);
+  const [progress, setProgress] = useState<LocalProgress | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadProfile() {
+    async function loadDashboard() {
       try {
         const user = await getCurrentUser();
 
@@ -39,28 +39,34 @@ export function Dashboard() {
           return;
         }
 
-        const data = await getProfile(user.id);
+        const [profileData, progressData] = await Promise.all([
+          getProfile(user.id),
+          getProgress(user.id),
+        ]);
 
         setProfile({
-          username: data.username,
-          english_level: data.english_level,
-          xp: data.xp ?? 0,
-          streak: data.streak ?? 0,
+          username: profileData.username ?? "",
+          english_level: profileData.english_level ?? "",
         });
+
+        setProgress(progressData);
       } catch (error) {
-        console.error("Unable to load profile:", error);
+        console.error("Unable to load dashboard:", error);
       } finally {
         setLoading(false);
       }
     }
 
-    loadProfile();
+    loadDashboard();
   }, []);
 
-  const username = loading ? "..." : profile?.username ?? "Learner";
-  const englishLevel = profile?.english_level ?? "A1";
-  const xp = profile?.xp ?? 0;
-  const streak = profile?.streak ?? 0;
+  const username = loading ? "..." : profile?.username || "Learner";
+  const englishLevel = profile?.english_level || "A1";
+
+  const xp = progress?.xp ?? 0;
+  const streak = progress?.streak ?? 0;
+  const dailyXp = progress?.dailyXp ?? 0;
+  const dailyGoal = progress?.dailyGoal ?? 20;
 
   return (
     <div className="flex flex-col gap-6">
@@ -82,8 +88,8 @@ export function Dashboard() {
         />
 
         <DailyGoalCard
-          completed={mockDailyGoal.completed}
-          total={mockDailyGoal.total}
+          completed={dailyXp}
+          total={dailyGoal}
         />
       </div>
 
@@ -131,4 +137,4 @@ export function Dashboard() {
       </div>
     </div>
   );
-          }
+}
