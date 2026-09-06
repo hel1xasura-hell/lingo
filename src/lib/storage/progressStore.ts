@@ -1,33 +1,45 @@
-import { get, put, STORES } from "./db";
+import { get, put, remove } from "./db";
 
-export interface LocalProgress {
+export type LocalProgress = {
   id: string;
   userId: string;
+
   xp: number;
   streak: number;
-  completedLessons: string[];
-  updatedAt: number;
+
+  dailyXp: number;
+  dailyGoal: number;
+
+  lessonsCompleted: number;
+  exercisesCompleted: number;
+
+  englishLevel: string;
+  targetLevel: string;
+
+  updatedAt: string;
+};
+
+function createProgressId(userId: string) {
+  return `progress:${userId}`;
 }
 
-export async function getLocalProgress(userId: string): Promise<LocalProgress | undefined> {
-  return get<LocalProgress>(STORES.progress, `${userId}:main`);
+export async function getLocalProgress(
+  userId: string,
+): Promise<LocalProgress | undefined> {
+  return get<LocalProgress>("progress", createProgressId(userId));
 }
 
 export async function saveLocalProgress(
+  progress: Omit<LocalProgress, "id">,
+): Promise<void> {
+  await put<LocalProgress>("progress", {
+    ...progress,
+    id: createProgressId(progress.userId),
+  });
+}
+
+export async function clearLocalProgress(
   userId: string,
-  updates: Partial<Omit<LocalProgress, "id" | "userId" | "updatedAt">>,
-): Promise<LocalProgress> {
-  const existing = await getLocalProgress(userId);
-
-  const progress: LocalProgress = {
-    id: `${userId}:main`,
-    userId,
-    xp: updates.xp ?? existing?.xp ?? 0,
-    streak: updates.streak ?? existing?.streak ?? 0,
-    completedLessons: updates.completedLessons ?? existing?.completedLessons ?? [],
-    updatedAt: Date.now(),
-  };
-
-  await put(STORES.progress, progress);
-  return progress;
+): Promise<void> {
+  await remove("progress", createProgressId(userId));
 }
