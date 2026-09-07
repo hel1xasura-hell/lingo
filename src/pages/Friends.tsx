@@ -1,326 +1,484 @@
 import { useEffect, useState } from "react";
 import {
-  UserPlus,
-  Users,
   Check,
-  X,
-  UserMinus,
+  UserPlus,
+  UserRound,
+  UserX,
   Search,
+  Users,
+  X,
 } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+
 import {
-  searchUsers,
-  sendFriendRequest,
-  getIncomingFriendRequests,
-  respondToFriendRequest,
   getFriends,
+  getIncomingFriendRequests,
   removeFriend,
+  respondToFriendRequest,
+  searchFriends,
+  sendFriendRequest,
 } from "@/lib/friends";
+
 import type {
-  Friend,
+  FriendProfile,
   FriendRequest,
-  ProfileSearchResult,
+  FriendSearchResult,
 } from "@/types/friends";
 
 export function Friends() {
-  const [userId, setUserId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [results, setResults] = useState<ProfileSearchResult[]>([]);
+  const [friends, setFriends] = useState<FriendProfile[]>([]);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
-  const [friends, setFriends] = useState<Friend[]>([]);
+  const [searchResults, setSearchResults] = useState<FriendSearchResult[]>([]);
+
+  const [searchText, setSearchText] = useState("");
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
-  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  async function loadData(id: string) {
-    const [incoming, friendList] = await Promise.all([
-      getIncomingFriendRequests(id),
-      getFriends(id),
-    ]);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
-    setRequests(incoming);
-    setFriends(friendList);
+  async function loadFriendsData() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const [friendsData, requestsData] = await Promise.all([
+        getFriends(),
+        getIncomingFriendRequests(),
+      ]);
+
+      setFriends(friendsData);
+      setRequests(requestsData);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load your friends right now.",
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    async function load() {
-      try {
-        const user = await getCurrentUser();
-
-        if (!user) {
-          setLoading(false);
-          return;
-        }
-
-        setUserId(user.id);
-        await loadData(user.id);
-      } catch (error) {
-        console.error("Unable to load friends:", error);
-        setMessage("Unable to load friends.");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    load();
+    void loadFriendsData();
   }, []);
 
   async function handleSearch() {
-    if (!userId || !search.trim()) {
-      setResults([]);
+    const query = searchText.trim();
+
+    if (!query) {
+      setSearchResults([]);
       return;
     }
 
     try {
       setSearching(true);
-      setMessage("");
+      setError("");
+      setSuccess("");
 
-      const data = await searchUsers(search.trim(), userId);
-      setResults(data);
-    } catch (error) {
-      console.error("Unable to search users:", error);
-      setMessage("Unable to search users.");
+      const results = await searchFriends(query);
+      setSearchResults(results);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to search for users.",
+      );
     } finally {
       setSearching(false);
     }
   }
 
-  async function handleSendRequest(targetUserId: string) {
-    if (!userId) return;
-
+  async function handleSendRequest(userId: string) {
     try {
-      await sendFriendRequest(userId, targetUserId);
-      setMessage("Friend request sent.");
-      setResults((current) =>
-        current.filter((user) => user.id !== targetUserId),
+      setProcessingId(userId);
+      setError("");
+      setSuccess("");
+
+      await sendFriendRequest(userId);
+
+      setSuccess("Friend request sent.");
+      setSearchResults((current) =>
+        current.filter((user) => user.id !== userId),
       );
-    } catch (error) {
-      console.error("Unable to send friend request:", error);
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Unable to send friend request.",
+
+      await loadFriendsData();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to send the friend request.",
       );
+    } finally {
+      setProcessingId(null);
     }
   }
 
-  async function handleRequest(
+  async function handleRequestResponse(
     requestId: string,
-    accept: boolean,
+    status: "accepted" | "declined",
   ) {
     try {
-      await respondToFriendRequest(requestId, accept);
-      setMessage(accept ? "Friend request accepted." : "Friend request declined.");
+      setProcessingId(requestId);
+      setError("");
+      setSuccess("");
 
-      if (userId) {
-        await loadData(userId);
+      await respondToFriendRequest(requestId, status);
+
+      if (status === "accepted") {
+        setSuccess("Friend request accepted.");
+      } else {
+        setSuccess("Friend request declined.");
       }
-    } catch (error) {
-      console.error("Unable to respond to friend request:", error);
-      setMessage("Unable to update friend request.");
+
+      await loadFriendsData();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to update the friend request.",
+      );
+    } finally {
+      setProcessingId(null);
     }
   }
 
-  async function handleRemoveFriend(friendId: string) {
-    if (!userId) return;
+  async function handleRemoveFriend(userId: string) {
+    const confirmed = window.confirm(
+      "Are you sure you want to remove this friend?",
+    );
+
+    if (!confirmed) return;
 
     try {
-      await removeFriend(userId, friendId);
-      setMessage("Friend removed.");
-      await loadData(userId);
-    } catch (error) {
-      console.error("Unable to remove friend:", error);
-      setMessage("Unable to remove friend.");
-    }
-  }
+      setProcessingId(userId);
+      setError("");
+      setSuccess("");
 
-  if (loading) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading friends...</p>
-      </div>
-    );
+      await removeFriend(userId);
+
+      setSuccess("Friend removed.");
+      await loadFriendsData();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to remove this friend.",
+      );
+    } finally {
+      setProcessingId(null);
+    }
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
-      <div>
-        <h1 className="font-display text-3xl font-semibold">
-          Friends
-        </h1>
-        <p className="mt-1 text-muted-foreground">
-          Connect with people and learn together.
-        </p>
-      </div>
+    <main className="min-h-full bg-base px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-5xl space-y-6">
+        {/* Header */}
+        <section>
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300">
+              <Users size={24} />
+            </div>
 
-      {message && (
-        <div className="rounded-xl border bg-card p-3 text-sm">
-          {message}
-        </div>
-      )}
+            <div>
+              <h1 className="text-2xl font-bold text-plum-900 dark:text-white">
+                Friends
+              </h1>
 
-      {/* Search */}
-      <section className="rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
-        <div className="mb-4 flex items-center gap-2">
-          <UserPlus className="h-5 w-5" />
-          <h2 className="font-semibold">Find friends</h2>
-        </div>
+              <p className="text-sm text-plum-600 dark:text-plum-300">
+                Find friends, accept requests, and learn together.
+              </p>
+            </div>
+          </div>
+        </section>
 
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        {/* Messages */}
+        {error && (
+          <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+            <X size={18} className="mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  handleSearch();
-                }
-              }}
-              placeholder="Search by username"
-              className="h-11 w-full rounded-xl border bg-background pl-10 pr-3 outline-none focus:ring-2 focus:ring-primary/30"
-            />
+        {success && (
+          <div className="flex items-start gap-3 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-300">
+            <Check size={18} className="mt-0.5 shrink-0" />
+            <span>{success}</span>
+          </div>
+        )}
+
+        {/* Search */}
+        <section className="rounded-3xl border border-rose-100 bg-surface p-5 shadow-sm dark:border-rose-950/50">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-plum-900 dark:text-white">
+              Find a friend
+            </h2>
+
+            <p className="mt-1 text-sm text-plum-600 dark:text-plum-300">
+              Search using their username.
+            </p>
           </div>
 
-          <button
-            type="button"
-            onClick={handleSearch}
-            disabled={searching}
-            className="rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSearch();
+            }}
+            className="flex flex-col gap-3 sm:flex-row"
           >
-            {searching ? "Searching..." : "Search"}
-          </button>
-        </div>
+            <div className="relative flex-1">
+              <Search
+                size={19}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-plum-400"
+              />
 
-        {results.length > 0 && (
-          <div className="mt-4 space-y-2">
-            {results.map((person) => (
-              <div
-                key={person.id}
-                className="flex items-center justify-between rounded-xl border p-3"
-              >
-                <div>
-                  <p className="font-medium">
-                    {person.name || person.username}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    @{person.username}
-                  </p>
-                </div>
+              <input
+                type="text"
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                placeholder="Enter username..."
+                className="w-full rounded-2xl border border-rose-200 bg-base py-3 pl-11 pr-4 text-sm text-plum-900 outline-none transition focus:border-rose-400 focus:ring-2 focus:ring-rose-200 dark:border-rose-900 dark:bg-base dark:text-white dark:focus:border-rose-600 dark:focus:ring-rose-950"
+              />
+            </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleSendRequest(person.id)}
-                  className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
+            <button
+              type="submit"
+              disabled={searching || !searchText.trim()}
+              className="rounded-2xl bg-rose-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {searching ? "Searching..." : "Search"}
+            </button>
+          </form>
+
+          {searchResults.length > 0 && (
+            <div className="mt-5 space-y-3">
+              {searchResults.map((user) => (
+                <div
+                  key={user.id}
+                  className="flex flex-col gap-3 rounded-2xl border border-rose-100 bg-base p-4 sm:flex-row sm:items-center sm:justify-between dark:border-rose-950/50"
                 >
-                  <UserPlus className="h-4 w-4" />
-                  Add
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300">
+                      <UserRound size={21} />
+                    </div>
 
-        {!searching && search.trim() && results.length === 0 && (
-          <p className="mt-4 text-sm text-muted-foreground">
-            No users found.
-          </p>
-        )}
-      </section>
+                    <div>
+                      <p className="font-semibold text-plum-900 dark:text-white">
+                        {user.name}
+                      </p>
 
-      {/* Requests */}
-      <section className="rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
-        <div className="mb-4 flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          <h2 className="font-semibold">Friend requests</h2>
-        </div>
-
-        {requests.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No pending friend requests.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {requests.map((request) => (
-              <div
-                key={request.id}
-                className="flex items-center justify-between rounded-xl border p-3"
-              >
-                <div>
-                  <p className="font-medium">
-                    {request.sender?.name || request.sender?.username}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    @{request.sender?.username}
-                  </p>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleRequest(request.id, true)}
-                    className="rounded-lg p-2 hover:bg-muted"
-                    aria-label="Accept friend request"
-                  >
-                    <Check className="h-5 w-5" />
-                  </button>
+                      <p className="text-sm text-plum-500 dark:text-plum-400">
+                        @{user.username}
+                      </p>
+                    </div>
+                  </div>
 
                   <button
                     type="button"
-                    onClick={() => handleRequest(request.id, false)}
-                    className="rounded-lg p-2 hover:bg-muted"
-                    aria-label="Decline friend request"
+                    disabled={processingId === user.id}
+                    onClick={() => void handleSendRequest(user.id)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-rose-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <X className="h-5 w-5" />
+                    <UserPlus size={17} />
+                    {processingId === user.id ? "Sending..." : "Add friend"}
                   </button>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          )}
+
+          {!searching &&
+            searchText.trim() &&
+            searchResults.length === 0 && (
+              <p className="mt-5 rounded-2xl bg-base px-4 py-3 text-sm text-plum-500 dark:text-plum-400">
+                No users found.
+              </p>
+            )}
+        </section>
+
+        {/* Incoming requests */}
+        <section className="rounded-3xl border border-rose-100 bg-surface p-5 shadow-sm dark:border-rose-950/50">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-plum-900 dark:text-white">
+                Friend requests
+              </h2>
+
+              <p className="mt-1 text-sm text-plum-600 dark:text-plum-300">
+                People who want to connect with you.
+              </p>
+            </div>
+
+            {requests.length > 0 && (
+              <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
+                {requests.length}
+              </span>
+            )}
           </div>
-        )}
-      </section>
 
-      {/* Friends */}
-      <section className="rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
-        <div className="mb-4 flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          <h2 className="font-semibold">My friends</h2>
-        </div>
+          {loading ? (
+            <p className="text-sm text-plum-500 dark:text-plum-400">
+              Loading requests...
+            </p>
+          ) : requests.length === 0 ? (
+            <div className="rounded-2xl bg-base px-4 py-6 text-center">
+              <UserPlus
+                size={25}
+                className="mx-auto mb-2 text-plum-400"
+              />
 
-        {friends.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            You don't have any friends yet.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {friends.map((friend) => (
-              <div
-                key={friend.user_id}
-                className="flex items-center justify-between rounded-xl border p-3"
-              >
-                <div>
-                  <p className="font-medium">
-                    {friend.name || friend.username}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    @{friend.username}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleRemoveFriend(friend.user_id)}
-                  className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-muted"
+              <p className="text-sm text-plum-500 dark:text-plum-400">
+                No pending friend requests.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {requests.map((request) => (
+                <div
+                  key={request.id}
+                  className="flex flex-col gap-3 rounded-2xl border border-rose-100 bg-base p-4 sm:flex-row sm:items-center sm:justify-between dark:border-rose-950/50"
                 >
-                  <UserMinus className="h-4 w-4" />
-                  Remove
-                </button>
-              </div>
-            ))}
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300">
+                      <UserRound size={21} />
+                    </div>
+
+                    <div>
+                      <p className="font-semibold text-plum-900 dark:text-white">
+                        {request.name}
+                      </p>
+
+                      <p className="text-sm text-plum-500 dark:text-plum-400">
+                        @{request.username}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={processingId === request.id}
+                      onClick={() =>
+                        void handleRequestResponse(request.id, "accepted")
+                      }
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-rose-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-600 disabled:opacity-50 sm:flex-none"
+                    >
+                      <Check size={17} />
+                      Accept
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={processingId === request.id}
+                      onClick={() =>
+                        void handleRequestResponse(request.id, "declined")
+                      }
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl border border-rose-200 px-4 py-2.5 text-sm font-semibold text-plum-700 transition hover:bg-rose-50 disabled:opacity-50 dark:border-rose-900 dark:text-plum-200 dark:hover:bg-rose-950/30 sm:flex-none"
+                    >
+                      <X size={17} />
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Friends list */}
+        <section className="rounded-3xl border border-rose-100 bg-surface p-5 shadow-sm dark:border-rose-950/50">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-plum-900 dark:text-white">
+              My friends
+            </h2>
+
+            <p className="mt-1 text-sm text-plum-600 dark:text-plum-300">
+              Your current friends on Lingo.
+            </p>
           </div>
-        )}
-      </section>
-    </div>
+
+          {loading ? (
+            <p className="text-sm text-plum-500 dark:text-plum-400">
+              Loading friends...
+            </p>
+          ) : friends.length === 0 ? (
+            <div className="rounded-2xl bg-base px-4 py-8 text-center">
+              <Users
+                size={30}
+                className="mx-auto mb-3 text-plum-400"
+              />
+
+              <p className="font-medium text-plum-800 dark:text-plum-200">
+                You don't have any friends yet.
+              </p>
+
+              <p className="mt-1 text-sm text-plum-500 dark:text-plum-400">
+                Search for a username above to add someone.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {friends.map((friend) => (
+                <div
+                  key={friend.id}
+                  className="rounded-2xl border border-rose-100 bg-base p-4 dark:border-rose-950/50"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300">
+                        <UserRound size={21} />
+                      </div>
+
+                      <div>
+                        <p className="font-semibold text-plum-900 dark:text-white">
+                          {friend.name}
+                        </p>
+
+                        <p className="text-sm text-plum-500 dark:text-plum-400">
+                          @{friend.username}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      title="Remove friend"
+                      disabled={processingId === friend.id}
+                      onClick={() => void handleRemoveFriend(friend.id)}
+                      className="rounded-xl p-2 text-plum-400 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/30"
+                    >
+                      <UserX size={18} />
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-surface px-3 py-2">
+                      <p className="text-xs text-plum-500 dark:text-plum-400">
+                        XP
+                      </p>
+
+                      <p className="font-semibold text-plum-900 dark:text-white">
+                        {friend.xp}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-surface px-3 py-2">
+                      <p className="text-xs text-plum-500 dark:text-plum-400">
+                        Streak
+                      </p>
+
+                      <p className="font-semibold text-plum-900 dark:text-white">
+                        {friend.streak} days
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
   );
 }
