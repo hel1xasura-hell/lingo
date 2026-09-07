@@ -1,13 +1,17 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+
 import { ThemeProvider } from "@/context/ThemeContext";
 import { AppLayout } from "@/layouts/AppLayout";
+
 import { Landing } from "@/pages/Landing";
 import { Login } from "@/pages/Login";
 import { Register } from "@/pages/Register";
 import { ProfileSetup } from "@/pages/ProfileSetup";
 import { Dashboard } from "@/pages/Dashboard";
 import { Profile } from "@/pages/Profile";
+import { Friends } from "@/pages/Friends";
 import { NotFound } from "@/pages/NotFound";
+
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { OfflineBanner } from "@/components/ui/OfflineBanner";
 
@@ -15,6 +19,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <OfflineBanner />
+
       <BrowserRouter
         basename={
           import.meta.env.BASE_URL === "/"
@@ -23,22 +28,25 @@ export default function App() {
         }
       >
         <Routes>
+          {/* Public routes */}
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/profile-setup" element={<ProfileSetup />} />
 
+          {/* Protected routes */}
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/friends" element={<Friends />} />
             </Route>
           </Route>
 
+          {/* Fallback */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>
   );
-                                             }
-
+}
